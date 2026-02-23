@@ -12,11 +12,14 @@ class InteractionCheckScreen extends StatefulWidget {
 
 class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
   bool isLoading = true;
-  List<String> selectedDrugs = [];
-  List<Interaction> foundInteractions = [];
+  List<String> selectedDrugs = []; // Список для хранения выбранных препаратов в уже нормализованном виде
+  List<Interaction> foundInteractions = []; // может быть заменить на ddi (из service), но пока так для удобства доступа к методам класса Interaction
   String section = '';
   String? evidence = '';
+  List<String> evidences = [];
   List<String> sentences = [];
+  String instr_A = '';
+  String instr_B = '';
 
   @override
   // Инициализация состояния и загрузка данных при открытии экрана
@@ -27,7 +30,7 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
   }
 
 // Метод для проверки взаимодействий между выбранными препаратами
-  void checkInteractions(List<String> drugs) {
+  /*void checkInteractions(List<String> drugs) {
     if (drugs.length < 2) return; // Проверяем, что выбрано хотя бы 2 препарата
 
     //final results = generateInteractions(drugs);
@@ -38,6 +41,12 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
     setState(() {
       foundInteractions = results;
     });
+  }*/
+
+  List<Interaction> getInteractions(List<String> drugs) {
+    return ddi.where((interaction) {
+      return drugs.contains(interaction.drugA) && drugs.contains(interaction.drugB);
+    }).toList();
   }
 
  // функция JSON загрузки из interaction_service.dart
@@ -183,34 +192,50 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
               Center(
                 child: ElevatedButton(
                   onPressed: () async{
-                    checkInteractions(selectedDrugs);
-
                     if (selectedDrugs.length < 2) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Пожалуйста, выберите хотя бы 2 препарата для проверки.')),
+                        const SnackBar(content: Text('Пожалуйста, выберите хотя бы 2 препарата для проверки')),
                       );
                       return;
                     }
-                    if(hasInteraction(selectedDrugs[0], selectedDrugs[1])) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Обнаружено взаимодействие между препаратами!')),
-                      );
-                      final String text = await foundInteractions[0].loadAndProcessInstruction(selectedDrugs[0]);
-                      final String drugARu = getRuName(selectedDrugs[0]);
-                      final String drugBRu = getRuName(selectedDrugs[1]);
-                      section = foundInteractions[0].extractInteractionSection(text);
-                      evidence = foundInteractions[0].findMention(section, drugBRu);
-                      foundInteractions[0].instr_string = evidence ?? 'Информация о взаимодействии не найдена';
-                      sentences = extractInteractionSentences(text, drugBRu);
-                      print(sentences);
-                      print(transliterate("escitalopram")); // Проверка транслитерации
 
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Взаимодействия между препаратами не обнаружено.')),
-                      );
-                      foundInteractions[0].instr_string = 'Нет взаимодействия!';
+                    //checkInteractions(selectedDrugs);
+                    foundInteractions = getInteractions(selectedDrugs); 
+
+                    //instr_A = await loadAndProcessInstruction(selectedDrugs[0]);
+                    //instr_B = await loadAndProcessInstruction(selectedDrugs[1]);
+                    final tempInstrA = await loadAndProcessInstruction(selectedDrugs[0]);
+                    final tempInstrB = await loadAndProcessInstruction(selectedDrugs[1]);
+
+                    final String drugARu = getRuName(selectedDrugs[0]);
+                    final String drugBRu = getRuName(selectedDrugs[1]);
+
+                    //section = foundInteractions[0].extractInteractionSection(instr_A);
+                    //evidence = foundInteractions[0].findMention(section, drugBRu);
+                    //foundInteractions[0].instr_string = evidence ?? 'Информация о взаимодействии не найдена';
+                    String tempSection = '';
+                    String? tempEvidence = '';
+                    List<String> tempSentences = [];
+                    if (foundInteractions.isNotEmpty) {
+                      tempSection = foundInteractions[0].extractInteractionSection(tempInstrA);
+                      tempEvidence = foundInteractions[0].findMention(tempSection, drugBRu);
+                      foundInteractions[0].instr_string = tempEvidence ?? 'Информация о взаимодействии не найдена';
                     }
+                    
+                    //sentences = extractInteractionSentences(instr_A, drugBRu);
+                    tempSentences = extractInteractionSentences(tempInstrA, drugBRu);
+
+                    setState(() {
+                      //foundInteractions = results;
+                      instr_A = tempInstrA;
+                      instr_B = tempInstrB;
+                      section = tempSection;
+                      evidence = tempEvidence;
+                      sentences = tempSentences;
+                    });
+                    
+                    print(tempSentences);
+                    print(transliterate("escitalopram")); // Проверка транслитерации
 
                   },
                   child: const Text('Проверить взаимодействия'),
@@ -223,8 +248,11 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
                   itemCount: foundInteractions.length,
                   itemBuilder: (context, index) {
                     final interaction = foundInteractions[index];
-                    final String drugARu = substanceNames[interaction.drugA]?['ru'] ?? interaction.drugA;
-                    final String drugBRu = substanceNames[interaction.drugB]?['ru'] ?? interaction.drugB;
+                    final String drugARu = getRuName(interaction.drugA);
+                    final String drugBRu = getRuName(interaction.drugB);
+                    TextSearchResult textSearchResult = searchTextEvidence(interaction, instr_A, instr_B);
+                    final status = interpret(hasInteraction(interaction.drugA, interaction.drugB), textSearchResult.found);
+                    //final status = InteractionStatus.ddiOnly; // status для тестирования отображения разных вариантов
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -254,15 +282,42 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
                               style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 8),
-                            
+
+                            Text(
+                              'Source: ',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              status == InteractionStatus.confirmedByText
+                                  ? 'База + инструкция'
+                                  : status == InteractionStatus.ddiOnly
+                                      ? 'Взаимодействие указано в базе\nПодтверждение в инструкции не найдено'
+                                      : status == InteractionStatus.textOnly
+                                          ? 'Потенциальное взаимодействие\nУпоминание найдено в инструкции'
+                                          : 'Нет данных о взаимодействии',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: status == InteractionStatus.confirmedByText
+                                    ? const Color.fromARGB(255, 255, 12, 12)
+                                    : status == InteractionStatus.ddiOnly
+                                        ? Colors.orange
+                                        : status == InteractionStatus.textOnly
+                                            ? Colors.blue
+                                            : Colors.grey,
+                                //fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+
                             // Третья строка: Инструкция (теперь она может быть любой длины)
                             const Text(
-                              'instr_string:',
+                              'Фрагмент из инструкции:',
                               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              interaction.instr_string,
+                              sentences.isNotEmpty ? sentences.join('\n\n') : 'Нет упоминания о взаимодействии в инструкции.',
                               style: const TextStyle(fontSize: 14),
                             ),
                             const SizedBox(height: 8),

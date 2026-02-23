@@ -23,19 +23,6 @@ class Interaction {
     );
   }
 
-  Future<String> loadAndProcessInstruction(String drugName) async {
-    try {
-      // 1. Читаем весь текстовый файл в одну строку
-      String fullText = await rootBundle.loadString('assets/instructions/$drugName.txt');
-
-      instr_string = fullText.trim();
-      return fullText.trim(); 
-      
-    } catch (e) {
-      return "Ошибка при загрузке файла: $e";
-    }
-  }
-
   String extractInteractionSection(String text) {
     final start = text.toLowerCase().indexOf(
       "взаимодействие с другими лекарственными средствами",
@@ -56,6 +43,19 @@ class Interaction {
 
   String process_string(String input) {
     return input.trim().toLowerCase();
+  }
+}
+
+Future<String> loadAndProcessInstruction(String drugName) async {
+  try {
+    // 1. Читаем весь текстовый файл в одну строку
+    String fullText = await rootBundle.loadString('assets/instructions/$drugName.txt');
+
+    //instr_string = fullText.trim();
+    return fullText.trim(); 
+    
+  } catch (e) {
+    return "Ошибка при загрузке файла: $e";
   }
 }
 
@@ -183,13 +183,23 @@ String transliterate(String s) {
     }
   }
 
+  // Обработка 'x'
+  text = text.replaceAll('x', 'кс');
+
   // 3. Правило для буквы 'c' (ц vs к)
   // Используем RegExp, чтобы найти 'c' перед e, i, y
   text = text.replaceAllMapped(RegExp(r'c(?=[eiy])'), (match) => 'ц');
 
   // 4. Двубуквенные сочетания
   final doubleChars = {
-    "ph": "ф", "th": "т", "ch": "х", "sh": "ш",
+    "qu": "кв",
+    "ph": "ф",
+    "th": "т", 
+    "ch": "х", 
+    "sh": "ш",
+    "ae": "е",
+    "oe": "е",
+    "zh": "ж", // xz
   };
   doubleChars.forEach((key, value) {
     text = text.replaceAll(key, value);

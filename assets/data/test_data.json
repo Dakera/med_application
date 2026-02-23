@@ -3,5 +3,50 @@
     "drugA": "escitalopram",
     "drugB": "sertraline",
     "severity": "major"
+  },
+    {
+    "drugA": "escitalopram",
+    "drugB": "fluoxetine",
+    "severity": "major"
+  },
+  {
+    "drugA": "escitalopram",
+    "drugB": "paroxetine",
+    "severity": "major"
+  },
+  {
+    "drugA": "escitalopram",
+    "drugB": "citalopram",
+    "severity": "major"
+  },
+  {
+    "drugA": "sertraline",
+    "drugB": "fluoxetine",
+    "severity": "major"
+  },
+  {
+    "drugA": "sertraline",
+    "drugB": "paroxetine",
+    "severity": "major"
+  },
+  {
+    "drugA": "sertraline",
+    "drugB": "citalopram",
+    "severity": "major"
+  },
+  {
+    "drugA": "fluoxetine",
+    "drugB": "paroxetine",
+    "severity": "moderate"
+  },
+  {
+    "drugA": "citalopram",
+    "drugB": "fluoxetine",
+    "severity": "minor"
+  },
+  {
+    "drugA": "paroxetine",
+    "drugB": "citalopram",
+    "severity": "major"
   }
 ]
