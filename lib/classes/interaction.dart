@@ -15,34 +15,81 @@ class Interaction {
   });
 
   // Фабричный конструктор для создания объекта из Map (JSON)
+  /*
   factory Interaction.fromJson(Map<String, dynamic> json) {
     return Interaction(
       drugA: json['drugA'] as String,
       drugB: json['drugB'] as String,
       severity: json['severity'] as String,
     );
+  }*/
+
+  // Фабрика возвращает Interaction? (nullable), если данные невалидны, конструктор factory не может вернуть null
+  static Interaction? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+
+    // Проверяем наличие всех обязательных полей и их тип
+    final drugA = json['drugA'];
+    final drugB = json['drugB'];
+    final severity = json['severity'];
+
+    if (drugA is! String || drugB is! String || severity is! String) {
+      // Здесь можно логировать ошибку (например, в Firebase Crashlytics)
+      return null;
+    }
+
+    return Interaction(
+      drugA: drugA,
+      drugB: drugB,
+      severity: severity,
+    );
   }
 
+
+
+
+/*
   String extractInteractionSection(String text) {
-    final start = text.toLowerCase().indexOf(
+    final headers = [
       "взаимодействие с другими лекарственными средствами",
-    );
+      "лекарственные взаимодействия",
+      "взаимодействие с другими препаратами",
+      "взаимодействия",
+      "другие препараты и препарат",
+      "совместимость с другими",
+    ];
+
+    final lowerText = text.toLowerCase();
+    int start = -1;
+
+    // Ищем первое совпадение из списка
+    for (var header in headers) {
+      start = lowerText.indexOf(header);
+      if (start != -1) break; // Если нашли, выходим из цикла
+    }
+
+    // Если ни один заголовок не найден, возвращаем весь текст (или пустую строку)
     if (start == -1) return text;
-    return text.substring(start, start + 1000);
-  }
+
+    // Возвращаем фрагмент текста (1000 символов — это примерная длина раздела)
+    // Используем clamp, чтобы не выйти за границы текста, если он короткий
+    int end = (start + 1000).clamp(0, text.length);
+    return text.substring(start, end);
+  }*/
 
   String? findMention(String text, String drug) {
-  final sentences = text.split(RegExp(r'[.!?]'));
-  for (final s in sentences) {
-      if (s.toLowerCase().contains(drug.toLowerCase())) {
-        return s.trim();
+    print("Searching for mentions of '$drug' in the instruction...");
+    final sentences = text.split(RegExp(r'[.!?]'));
+    for (final s in sentences) {
+        if (s.toLowerCase().contains(drug.toLowerCase())) {
+          return s.trim();
+        }
       }
+      return null;
     }
-    return null;
-  }
 
-  String process_string(String input) {
-    return input.trim().toLowerCase();
+    String process_string(String input) { // wtf is this
+      return input.trim().toLowerCase();
   }
 }
 
@@ -50,7 +97,6 @@ Future<String> loadAndProcessInstruction(String drugName) async {
   try {
     // 1. Читаем весь текстовый файл в одну строку
     String fullText = await rootBundle.loadString('assets/instructions/$drugName.txt');
-
     //instr_string = fullText.trim();
     return fullText.trim(); 
     
@@ -139,6 +185,10 @@ List<String> extractInteractionSentences(
   }).toList();
 }
 
+
+
+
+
 const interactionKeywords = [
   'повыс',
   'содерж',
@@ -160,6 +210,15 @@ const interactionKeywords = [
   "другие препараты и лекарства",
 
 ];
+
+const negations = [
+  "не влияет",
+  "не оказывает влияния",
+  "не изменяет",
+  "не наблюдается",
+  "не обнаружено"
+];
+
 
 // Транслитерация английских названий в русские (запасной вариант, если нет в словаре)
 String transliterate(String s) {
