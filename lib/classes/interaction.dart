@@ -5,48 +5,23 @@ class Interaction {
   final String drugA;
   final String drugB;
   final String severity;
-  String instr_string;
+  String? instr_string;
 
   Interaction({
     required this.drugA, 
     required this.drugB, 
     required this.severity,
-    this.instr_string = '',
+    this.instr_string = null,
   });
 
-  // Фабричный конструктор для создания объекта из Map (JSON)
-  /*
-  factory Interaction.fromJson(Map<String, dynamic> json) {
+  // Конвертация из Map<String, dynamic> в объект класса Interaction (например, при чтении из базы данных)
+  factory Interaction.fromMap(Map<String, dynamic> map) { 
     return Interaction(
-      drugA: json['drugA'] as String,
-      drugB: json['drugB'] as String,
-      severity: json['severity'] as String,
-    );
-  }*/
-
-  // Фабрика возвращает Interaction? (nullable), если данные невалидны, конструктор factory не может вернуть null
-  static Interaction? fromJson(Map<String, dynamic>? json) {
-    if (json == null) return null;
-
-    // Проверяем наличие всех обязательных полей и их тип
-    final drugA = json['drugA'];
-    final drugB = json['drugB'];
-    final severity = json['severity'];
-
-    if (drugA is! String || drugB is! String || severity is! String) {
-      // Здесь можно логировать ошибку (например, в Firebase Crashlytics)
-      return null;
-    }
-
-    return Interaction(
-      drugA: drugA,
-      drugB: drugB,
-      severity: severity,
+      drugA: (map['Drug_A'] ?? 'Unknown drug A') as String,
+      drugB: (map['Drug_B'] ?? 'Unknown drug B') as String,
+      severity: (map['Level'] ?? 'Unknown severity') as String,
     );
   }
-
-
-
 
 /*
   String extractInteractionSection(String text) {
@@ -184,9 +159,6 @@ List<String> extractInteractionSentences(
     return hasSubstance && hasKeyword;
   }).toList();
 }
-
-
-
 
 
 const interactionKeywords = [

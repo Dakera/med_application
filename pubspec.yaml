@@ -34,6 +34,10 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0 # требуется для Desktop/Тестов
+  path: ^1.9.0
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +68,7 @@ flutter:
   assets:
     - assets/data/test_data.json 
     - assets/instructions/
+    - assets/database/Interaction_pairs.db
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

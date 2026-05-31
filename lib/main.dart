@@ -1,7 +1,20 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../screens/interaction_screen.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Если приложение запущено на Desktop (Windows, macOS, Linux)
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Инициализируем FFI для работы с SQLite
+    sqfliteFfiInit();
+    // Назначаем глобальную фабрику баз данных
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(const MyApp());
 }
 
