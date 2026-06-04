@@ -1,23 +1,24 @@
+import 'evidence.dart';
+import 'text_search_result.dart';
+
 class InteractionResult {
   final String drugA;
   final String drugB;
+  final String drugARu;
+  final String drugBRu;
   final String severity;
+  final InteractionStatus status;
+  final String section;
+  final List<Evidence> evidence;
 
-  final List<String> evidenceFromA; // Предложения из инструкции А
-  final List<String> evidenceFromB; // Предложения из инструкции Б
-
-  final bool confirmedByText;
-
-  // Конструктор
   InteractionResult({
     required this.drugA,
     required this.drugB,
+    required this.drugARu,
+    required this.drugBRu,
     required this.severity,
-    required this.evidenceFromA,
-    required this.evidenceFromB,
-    required this.confirmedByText,
+    required this.status,
+    required this.section,
+    required this.evidence,
   });
-
-  // Полезный геттер для объединения всех доказательств
-  List<String> get allEvidence => [...evidenceFromA, ...evidenceFromB];
 }
