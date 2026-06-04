@@ -1,5 +1,4 @@
-import 'package:sqflite/sqflite.dart';
-import '../../classes/interaction.dart';
+import '../../models/interaction.dart';
 import '../services/db_service.dart';
 
 class InteractionRepository {
