@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../models/text_search_result.dart';
 import '../../models/interaction_result.dart';
 import '../../models/evidence.dart';
+import '../../models/atc_code.dart';
 import '../../data/repositories/interaction_repository.dart';
+import '../../data/repositories/atc_repository.dart';
 import '../../data/services/text_mining_service.dart';
 
 class InteractionCheckScreen extends StatefulWidget {
@@ -133,6 +135,7 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
   }
 
   // Логика нажатия на кнопку: инкапсулирует все тяжелые расчеты
+  // ИЗМЕНЕННЫЙ ЛОГИЧЕСКИЙ МЕТОД НАЖАТИЯ НА КНОПКУ: независимый параллельный поиск
   Future<void> _onCheckInteractionsPressed() async {
     if (selectedDrugs.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,11 +144,8 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
       return;
     }
 
-    // 1. Включаем индикатор загрузки перед началом тяжелых операций
     setState(() { isLoading = true; });
 
-    // 2. Оборачиваем всю логику в try / finally, чтобы ГАРАНТИРОВАННО 
-    // выключить индикатор загрузки, даже если произойдет ошибка или return.
     try {
       final String drugA = selectedDrugs[0];
       final String drugB = selectedDrugs[1];
@@ -153,48 +153,54 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
       final String drugBRu = TextMiningService.getRuName(drugB);
 
       final repo = InteractionRepository();
-      // Ждем ответ от базы данных
       final interaction = await repo.findInteraction(drugA, drugB);
 
-      // 3. ПРОВЕРКА MOUNTED. 
-      // Пока мы ждали БД, пользователь мог нажать кнопку "Назад" и закрыть экран.
-      // Если экран закрыт, context уничтожен. Дальше идти нельзя.
+      final atcRepo = AtcRepository();
+      final atcCodesA = await atcRepo.findAtcCodes(drugA);
+      final atcCodesB = await atcRepo.findAtcCodes(drugB);
+
       if (!mounted) return;
 
-      if (interaction == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Взаимодействия между выбранными препаратами не найдены')),
-        );
+      final tempInstrA = await TextMiningService.loadAndProcessInstruction(drugA);
+      final tempInstrB = await TextMiningService.loadAndProcessInstruction(drugB);
 
-        // Очищаем предыдущие результаты, если они были
+      final tempTextResult = TextMiningService.searchTextEvidence(drugA, drugB, tempInstrA, tempInstrB);
+      
+      String tempSection = 'Раздел не определен';
+      List<Evidence> tempEvidence = [];
+      String tempInstructionUsed = 'Не использовалась (информация из базы данных)'; // По умолчанию
+
+      // Извлекаем конкретные предложения-доказательства
+      if (tempTextResult.fromA.isNotEmpty) {
+        tempSection = TextMiningService.extractSection(tempInstrA);
+        tempEvidence = TextMiningService.extractEvidence(tempSection, drugBRu, contextWindow: 1);
+        if (tempEvidence.isNotEmpty) {
+          tempInstructionUsed = drugARu; // Совпадение найдено в инструкции Препарата А
+        }
+      } 
+      
+      // Если в первой инструкции не нашли, пробуем забрать доказательства из второй
+      if (tempEvidence.isEmpty && tempTextResult.fromB.isNotEmpty) {
+        tempSection = TextMiningService.extractSection(tempInstrB);
+        tempEvidence = TextMiningService.extractEvidence(tempSection, drugARu, contextWindow: 1);
+        if (tempEvidence.isNotEmpty) {
+          tempInstructionUsed = drugBRu; // Совпадение найдено в инструкции Препарата Б
+        }
+      }
+
+      final bool ddiExists = interaction != null;
+      final bool textFound = tempEvidence.isNotEmpty;
+
+      if (!ddiExists && !textFound) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Взаимодействия между выбранными препаратами не найдены ни в базе, ни в инструкциях')),
+        );
         setState(() { checkResult = null; }); 
         return;
       }
 
-      // Загружаем тексты инструкций в фоне
-      final tempInstrA = await TextMiningService.loadAndProcessInstruction(drugA);
-      final tempInstrB = await TextMiningService.loadAndProcessInstruction(drugB);
+      final finalStatus = TextMiningService.interpret(ddiExists, textFound);
 
-      // Проводим лингвистический анализ
-      final tempTextResult = TextMiningService.searchTextEvidence(interaction, tempInstrA, tempInstrB);
-      
-      String tempSection = 'Раздел не определен';
-      List<Evidence> tempEvidence = [];
-
-      if (tempTextResult.fromA.isNotEmpty) {
-        tempSection = TextMiningService.extractSection(tempInstrA);
-        tempEvidence = TextMiningService.extractEvidence(tempSection, drugBRu, contextWindow: 1);
-      } else if (tempTextResult.fromB.isNotEmpty) {
-        tempSection = TextMiningService.extractSection(tempInstrB);
-        tempEvidence = TextMiningService.extractEvidence(tempSection, drugARu, contextWindow: 1);
-      }
-
-      // Рассчитываем итоговый статус
-      final finalStatus = TextMiningService.interpret(true, tempTextResult.found); // true, потому что взаимодействие уже найдено в базе, а текстовый поиск — это дополнительная проверка
-      // но нужно изменить геттер found
-
-      // Сохраняем ВСЁ разом в одну модель данных
-      // Снова проверяем mounted, так как были новые await (чтение файлов инструкций)
       if (mounted) {
         setState(() {
           checkResult = InteractionResult(
@@ -202,23 +208,62 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             drugB: drugB,
             drugARu: drugARu,
             drugBRu: drugBRu,
-            severity: interaction.severity,
+            severity: interaction?.severity ?? 'unknown', 
             status: finalStatus,
             section: tempSection,
             evidence: tempEvidence,
+            instructionUsed: tempInstructionUsed, // <-- Передаем зафиксированное имя
+            atcCodesA: atcCodesA,
+            atcCodesB: atcCodesB,
           );
         });
       }
+    } catch (e) {
+      print("Ошибка при проверке взаимодействий: $e");
     } finally {
-      // ГАРАНТИРОВАННЫЙ СБРОС ЗАГРУЗКИ
-      // Этот код выполнится в 100% случаев: нашли мы результат, не нашли, или вылетела ошибка.
       if (mounted) {
         setState(() { isLoading = false; });
       }
     }
   }
 
+// Вспомогательный метод для динамической подсветки целевого предложения маркером
+  Widget _buildHighlightedContext(Evidence e) {
+    final String contextText = e.context;
+    final String matchText = e.sentence;
+
+    // Ищем точное вхождение предложения внутри окна контекста
+    final int index = contextText.indexOf(matchText);
+    if (index == -1) {
+      // Если по какой-то причине не сошлось, выводим обычный текст
+      return Text(contextText, style: const TextStyle(fontSize: 14));
+    }
+
+    // Делим строку на до, совпадение и после
+    final String before = contextText.substring(0, index);
+    final String after = contextText.substring(index + matchText.length);
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+        children: [
+          TextSpan(text: before),
+          TextSpan(
+            text: matchText,
+            style: TextStyle(
+              backgroundColor: Colors.yellow.shade300, // Цвет маркера-хайлайтера
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          TextSpan(text: after),
+        ],
+      ),
+    );
+  }
+
   // Виджет карточки: только верстка, никакой бизнес-логики!
+  // Обновленный виджет карточки результата
   Widget _buildResultCard(InteractionResult result) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -227,12 +272,13 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Первая строка: Иконка + Заголовок
             Row(
               children: [
                 Icon(
                   Icons.warning, 
-                  color: result.severity == 'major' ? Colors.red : Colors.orange,
+                  color: result.severity == 'major' 
+                      ? Colors.red 
+                      : (result.severity == 'unknown' ? Colors.blue : Colors.orange),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -245,10 +291,19 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Вторая строка: Опасность
             Text(
               'Severity: ${result.severity}',
               style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+
+            Text(
+              'ATC (${result.drugARu}): ${_formatAtcCodes(result.atcCodesA)}',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+            ),
+            Text(
+              'ATC (${result.drugBRu}): ${_formatAtcCodes(result.atcCodesB)}',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
             ),
             const SizedBox(height: 8),
 
@@ -258,26 +313,25 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              _getLabelForStatus(result.status), // Человекочитаемая интерпретация статуса
+              _getLabelForStatus(result.status),
               style: TextStyle(
                 fontSize: 14,
                 color: _getColorForStatus(result.status),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
+            // НОВАЯ СТРОКА: Вывод используемой инструкции
             const Text(
-              'Фрагмент из инструкции:',
+              'Использованный документ:',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
-              result.evidence.isNotEmpty 
-                  ? result.evidence.map((e) => e.context).join('\n\n') 
-                  : 'Нет упоминания о взаимодействии в инструкции.',
-              style: const TextStyle(fontSize: 14),
+              'Официальная инструкция препарата: ${result.instructionUsed}',
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade700),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             const Text(
               'Section:',
@@ -288,23 +342,60 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
               result.section,
               style: const TextStyle(fontSize: 14),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             const Text(
-              'Evidence:',
+              'Фрагмент из инструкции (Контекст):',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            Text(
-              result.evidence.isNotEmpty 
-                  ? result.evidence.map((e) => e.sentence).join('\n\n') 
-                  : 'Нет доказательств взаимодействия в инструкции.',
-              style: const TextStyle(fontSize: 14),
+            // УЛУЧШЕНО: Мапим контекст с применением умного маркера подсветки
+            result.evidence.isEmpty
+                ? const Text('Нет упоминания о взаимодействии в инструкции.', style: TextStyle(fontSize: 14))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: result.evidence.map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: _buildHighlightedContext(e),
+                    )).toList(),
+                  ),
+            const SizedBox(height: 12),
+
+            const Text(
+              'Evidence (Сработавшее предложение):',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 4),
+            // УЛУЧШЕНО: Само изолированное предложение выделяем стильной плашкой
+            result.evidence.isEmpty
+                ? const Text('Нет доказательств взаимодействия в инструкции.', style: TextStyle(fontSize: 14))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: result.evidence.map((e) => Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 6.0),
+                      padding: const EdgeInsets.all(8.0),
+                      decoration: BoxDecoration(
+                        color: Colors.yellow.shade100,
+                        border: Border(left: BorderSide(width: 4, color: Colors.amber.shade700)),
+                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                      ),
+                      child: Text(
+                        e.sentence,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
+                      ),
+                    )).toList(),
+                  ),
           ],
         ),
       ),
     );
+  } // ИЗМЕНЕННЫЙ КОНСТРУКТОР: теперь он принимает весь InteractionResult, а не отдельные поля
+
+  // Форматирует список ATC-кодов (level5) препарата для строки в карточке
+  String _formatAtcCodes(List<AtcCode> codes) {
+    if (codes.isEmpty) return 'нет данных';
+    return codes.map((c) => c.level5).join(', ');
   }
 
   // Вспомогательные методы отображения для UI

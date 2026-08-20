@@ -1,0 +1,150 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Schema" id="schema1">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ATC_CLASSIFICATION -->
+        <mxCell id="atc" value="ATC_CLASSIFICATION" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="240" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f1" value="PK  level5" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="26" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f2" value="level3" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="50" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f3" value="level3_description" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="74" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f4" value="level4" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="98" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f5" value="level4_description" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="122" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="atc_f6" value="who_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="atc">
+          <mxGeometry y="146" width="240" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- MOLECULE_DICTIONARY -->
+        <mxCell id="md" value="MOLECULE_DICTIONARY" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="460" y="40" width="220" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="md_f1" value="PK  molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="md">
+          <mxGeometry y="26" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="md_f2" value="chembl_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="md">
+          <mxGeometry y="50" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="md_f3" value="pref_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="md">
+          <mxGeometry y="74" width="220" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- MOLECULE_ATC_CLASSIFICATION -->
+        <mxCell id="mac" value="MOLECULE_ATC_CLASSIFICATION" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="200" y="280" width="250" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_f1" value="PK  mol_atc_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mac">
+          <mxGeometry y="26" width="250" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_f2" value="FK  level5" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mac">
+          <mxGeometry y="50" width="250" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="mac_f3" value="FK  molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mac">
+          <mxGeometry y="74" width="250" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- MOLECULE_SYNONYMS -->
+        <mxCell id="ms" value="MOLECULE_SYNONYMS" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="40" y="460" width="220" height="122" as="geometry" />
+        </mxCell>
+        <mxCell id="ms_f1" value="PK  molsyn_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="ms">
+          <mxGeometry y="26" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ms_f2" value="FK  molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="ms">
+          <mxGeometry y="50" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ms_f3" value="syn_type" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="ms">
+          <mxGeometry y="74" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ms_f4" value="synonyms" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="ms">
+          <mxGeometry y="98" width="220" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- MOLECULE_HIERARCHY -->
+        <mxCell id="mh" value="MOLECULE_HIERARCHY" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="490" y="280" width="220" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="mh_f1" value="PK  molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mh">
+          <mxGeometry y="26" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="mh_f2" value="FK  parent_molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mh">
+          <mxGeometry y="50" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="mh_f3" value="FK  active_molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="mh">
+          <mxGeometry y="74" width="220" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- PRODUCTS -->
+        <mxCell id="p" value="PRODUCTS" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="490" y="460" width="220" height="122" as="geometry" />
+        </mxCell>
+        <mxCell id="p_f1" value="PK  product_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="p">
+          <mxGeometry y="26" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="p_f2" value="trade_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="p">
+          <mxGeometry y="50" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="p_f3" value="route" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="p">
+          <mxGeometry y="74" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="p_f4" value="dosage_form" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="p">
+          <mxGeometry y="98" width="220" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- FORMULATIONS -->
+        <mxCell id="f" value="FORMULATIONS" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=1;marginBottom=0;collapsible=0;swimlaneFillColor=#ffffff;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="780" y="380" width="240" height="146" as="geometry" />
+        </mxCell>
+        <mxCell id="f_f1" value="PK  formulation_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="f">
+          <mxGeometry y="26" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="f_f2" value="FK  product_id" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="f">
+          <mxGeometry y="50" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="f_f3" value="FK  molregno" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="f">
+          <mxGeometry y="74" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="f_f4" value="ingredient" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="f">
+          <mxGeometry y="98" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="f_f5" value="strength" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;fontSize=12;" vertex="1" parent="f">
+          <mxGeometry y="122" width="240" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="e1" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="atc" target="mac">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="md" target="mac">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="md" target="ms">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="md" target="mh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="md" target="f">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="p" target="f">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

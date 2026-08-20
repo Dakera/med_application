@@ -1,17 +1,23 @@
 import '../../models/interaction.dart';
 import '../../models/evidence.dart';
 import '../../models/text_search_result.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 class TextMiningService {
   // -------------- text_search_result.dart ---------------
 
   // Функция для поиска упоминаний в текстах инструкций (база данных 2)
-  static TextSearchResult searchTextEvidence(Interaction? interaction, String instruction1, String instruction2) {
-    final drugEvidenceFromA = findMention(instruction1, getRuName(interaction!.drugB));
-    print("Searching for mentions of '${interaction.drugB}' in instruction 1...");
-    final drugEvidenceFromB = findMention(instruction2, getRuName(interaction.drugA));
-    print("Searching for mentions of '${interaction.drugA}' in instruction 2...");
+  // ИЗМЕНЕНО: Теперь функция принимает названия напрямую и независима от наличия объекта Interaction в БД
+  static TextSearchResult searchTextEvidence(String drugA, String drugB, String instruction1, String instruction2) {
+    final drugBRu = getRuName(drugB);
+    final drugARu = getRuName(drugA);
+
+    debugPrint("Searching for mentions of '$drugBRu' in instruction 1...");
+    final drugEvidenceFromA = findMention(instruction1, drugBRu);
+    
+    debugPrint("Searching for mentions of '$drugARu' in instruction 2...");
+    final drugEvidenceFromB = findMention(instruction2, drugARu);
 
     return TextSearchResult(
       drugEvidenceFromA != null ? [drugEvidenceFromA] : [],
@@ -29,11 +35,11 @@ class TextMiningService {
 
   //-------------- interaction.dart ---------------
 
+  // УЛУЧШЕНО: Теперь использует стемминг для поиска упоминаний, чтобы падежи не ломали логику
   static String? findMention(String text, String drug) {
-    print("Searching for mentions of '$drug' in the instruction...");
     final sentences = text.split(RegExp(r'[.!?]'));
     for (final s in sentences) {
-        if (s.toLowerCase().contains(drug.toLowerCase())) {
+        if (_containsDrug(s, drug)) {
           return s.trim();
         }
       }
@@ -45,16 +51,17 @@ class TextMiningService {
   }
 
   static Future<String> loadAndProcessInstruction(String drugName) async {
-      try {
-        // 1. Читаем весь текстовый файл в одну строку
-        String fullText = await rootBundle.loadString('assets/instructions/$drugName.txt');
-        //instr_string = fullText.trim();
-        return fullText.trim(); 
-        
-      } catch (e) {
-        return "Ошибка при загрузке файла: $e";
-      }
+    try {
+      // 1. Читаем весь текстовый файл в одну строку
+      String fullText = await rootBundle.loadString('assets/instructions/$drugName.txt');
+      //instr_string = fullText.trim();
+      return fullText.trim(); 
+      
+    } catch (e) {
+      return "Ошибка при загрузке файла: $e";
     }
+  }
+  
   static const Map<String, String> substanceCanonical = {
     "эсциталопрам": "escitalopram",
     "escitalopram": "escitalopram",
@@ -93,8 +100,8 @@ class TextMiningService {
       final hasKeyword = interactionKeywords.any((k) => lower.contains(k));
       
       if (hasSubstance) {
-        print('Нашел препарат в: $s');
-        print('Есть ли ключевое слово? $hasKeyword');
+        debugPrint('Нашел препарат в: $s');
+        debugPrint('Есть ли ключевое слово? $hasKeyword');
       }
       
       return hasSubstance && hasKeyword;
@@ -116,7 +123,8 @@ class TextMiningService {
 
     // 1. Правило первой буквы: 'e' в начале слова -> 'э'
     if (text.startsWith('e')) {
-      text = 'э' + text.substring(1);
+      text = 'э${text.substring(1)}';
+      // text = 'э' + text.substring(1);
     }
 
     // 2. Обработка окончаний (чтобы sertraline -> сертралин)
@@ -171,7 +179,7 @@ class TextMiningService {
     }
 
     return result.toString();
-  }
+  } // transliterate
 
   static const interactionKeywords = [
     'повыс',
@@ -204,48 +212,6 @@ class TextMiningService {
   ];
   
   // -------------- evidence.dart ---------------
-
-  // Основная функция для извлечения доказательств из инструкции
-  static List<Evidence> extractEvidence(
-    String instruction,
-    String targetDrug,
-    {int contextWindow = 1}
-  ) {
-
-    final sentences = instruction
-        .toLowerCase()
-        .split(RegExp(r'[.!?]'))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-
-    final results = <Evidence>[];
-
-    for (int i = 0; i < sentences.length; i++) {
-
-      final s = sentences[i];
-      print("Analyzing sentence: $s");
-
-      if (!_containsDrug(s, targetDrug)) continue;
-
-      if (!_containsKeyword(s)) continue;
-
-      if (_hasNegation(s)) continue;
-
-      final context = _buildContext(sentences, i, contextWindow);
-
-      results.add(
-        Evidence(
-          sentence: s,
-          context: context,
-          sentenceIndex: i,
-        ),
-      );
-      print("Added evidence: $s with context: $context");
-    }
-
-    return results;
-  }
 
   // Функция для извлечения раздела взаимодействий из инструкции
   static String extractSection(String text) {
@@ -286,10 +252,183 @@ class TextMiningService {
     }
 
     return text.substring(start, end);
-  }
+  } // extractSection
+
+  // Основная улучшенная функция для извлечения доказательств с умной обработкой списков и сохранением регистра
+  static List<Evidence> extractEvidence(
+    String instruction,
+    String targetDrug,
+    {int contextWindow = 1}
+    ) {
+    // 1. Сначала разбиваем текст на строки, чтобы понять структуру списков
+    final rawLines = instruction.split(RegExp(r'[\n\r]+'));
+    
+    final List<String> sentences = [];
+    String currentHeader = "";
+
+    for (var line in rawLines) {
+      line = line.trim();
+      if (line.isEmpty) continue;
+
+      // Если строка заканчивается на двоеточие — это родительский заголовок для списка
+      if (line.endsWith(':')) {
+        currentHeader = line;
+        sentences.add(line); // Добавляем сам заголовок как отдельный элемент
+        continue;
+      }
+
+      // Проверяем, является ли строка элементом списка.
+      // Признаки: начинается с маркера (- • *), с цифры с точкой/скобкой (1. или 1)) 
+      // или заканчивается на точку с запятой / запятую.
+      final isBullet = line.startsWith(RegExp(r'^[-•*♦○◘■□▪▫]')) || 
+                       line.startsWith(RegExp(r'^\d+[\).]\s*')) ||
+                       line.endsWith(';') || 
+                       line.endsWith(',');
+
+      if (isBullet && currentHeader.isNotEmpty) {
+        // Очищаем маркер списка на конце и в начале для красивой склейки
+        final cleanLine = line.replaceAll(RegExp(r'^[-•*♦○◘■□▪▫]\s*'), '');
+        
+        // Создаем "виртуальное предложение", обогащенное контекстом заголовка!
+        sentences.add("$currentHeader $cleanLine");
+      } else {
+        // Если это обычный текст (не список), разбиваем его стандартно по точкам
+        // и по ';' — в схлопнутых extractSection'ом разделах между двумя точками
+        // часто лежит несколько '• категория: препараты;' клауз подряд
+        final subSentences = line.split(RegExp(r'[.!?;]')).map((s) => s.trim()).where((s) => s.isNotEmpty);
+        for (final s in subSentences) {
+          sentences.add(s);
+        }
+      }
+
+      // Если строка завершилась точкой, значит мысль или весь список точно закончились.
+      // Сбрасываем контекст заголовка.
+      if (line.endsWith('.')) {
+        currentHeader = "";
+      }
+    }
+
+    final results = <Evidence>[];
+
+    // 2. Основной цикл анализа сегментов текста
+    for (int i = 0; i < sentences.length; i++) {
+      final s = sentences[i];
+      
+      // Переводим в нижний регистр ТОЛЬКО для проверок, чтобы сохранить исходный регистр для UI
+      final lowerSentence = s.toLowerCase();
+      debugPrint("Analyzing sentence: $s");
+
+      // Передаем lowerSentence во все поисковые утилиты
+      if (!_containsDrug(lowerSentence, targetDrug)) continue;
+
+      if (!_containsKeyword(lowerSentence)) continue;
+
+      if (_hasNegation(lowerSentence)) continue;
+
+      // Строим окно контекста из нашего красивого структурированного списка сегментов
+      final context = _buildContext(sentences, i, contextWindow);
+
+      results.add(
+        Evidence(
+          sentence: s, // Сюда уйдет красивая строка с правильным регистром букв!
+          context: context,
+          sentenceIndex: i,
+        ),
+      );
+      debugPrint("Added evidence: $s with context: $context");
+    }
+
+    return results;
+  } // extractEvidence
 
 
   // Вспомогательные приватные методы evidence.dart
+
+  // Функция для получения основы слова препарата (для более гибкого поиска)
+  /*static String _stemDrug(String word) {
+    if (word.length <= 5) return word;
+    return word.substring(0, word.length - 2);
+  }*/
+
+  // Полноценный алгоритм Стемминга Портера для русского языка (OFFLINE NLP)
+  static String rusPorterStem(String word) {
+    word = word.toLowerCase().trim().replaceAll('ё', 'е');
+    
+    // Находим первую гласную, чтобы определить начало области RV (после первой гласной)
+    final vowels = RegExp(r'[аеиоуыэюя]');
+    final match = vowels.firstMatch(word);
+    if (match == null) return word; // Если гласных нет вообще, возвращаем как есть
+
+    final int rvStart = match.end;
+    final String preRv = word.substring(0, rvStart);
+    String rv = word.substring(rvStart);
+
+    if (rv.isEmpty) return word;
+
+    // Шаг 1: Проверяем и удаляем окончания идеального деепричастия (Perfective Gerund)
+    final perfectiveGerund = RegExp(r'(ив|ивши|ившись|ыв|ывши|ывшись)$');
+    final perfectiveGerundWithA = RegExp(r'([ая])(в|вши|вшись)$');
+
+    if (perfectiveGerund.hasMatch(rv)) {
+      rv = rv.replaceAll(perfectiveGerund, '');
+    } else if (perfectiveGerundWithA.hasMatch(rv)) {
+      rv = rv.replaceAll(RegExp(r'(в|вши|вшись)$'), '');
+    } else {
+      // Шаг 2: Удаляем возвратные суффиксы (Reflexive)
+      rv = rv.replaceAll(RegExp(r'(с[яь])$'), '');
+
+      // Шаг 3: Удаляем окончания прилагательных, причастий, глаголов или существительных
+      final adjective = RegExp(r'(ее|ие|ое|ые|ними|ыми|ей|ой|уй|ым|им|ом|ем|ая|оя|яя|ою|ею|ую|юю|их|ых|ова|ева|ого|его)$');
+      final noun = RegExp(r'(а|ев|ов|ами|ями|ах|ях|е|и|ий|ия|о|у|ы|ь|ю|я|ом|ем|ей|ией|ием|ия|ям|ам)$');
+      final verb = RegExp(r'(ила|ыла|ена|ейте|уйте|ите|или|ыли|ий|уй|де|ыть|ись|ысь|илась|ылась|ала|яла|не|ете|ны|ть|ешь|нно)$');
+
+      if (adjective.hasMatch(rv)) {
+        rv = rv.replaceAll(adjective, '');
+      } else if (verb.hasMatch(rv)) {
+        rv = rv.replaceAll(verb, '');
+      } else if (noun.hasMatch(rv)) {
+        rv = rv.replaceAll(noun, '');
+      }
+    }
+
+    // Шаг 4: Удаляем производные суффиксы (Derivational), если остались
+    rv = rv.replaceAll(RegExp(r'(ост|ость)$'), '');
+
+    // Шаг 5: Очищаем возможный мягкий знак на конце получившейся основы
+    rv = rv.replaceAll(RegExp(r'ь$'), '');
+
+    return preRv + rv;
+  } // rusPorterStem
+
+  // Обновленная функция проверки наличия лекарства в предложении
+  static bool _containsDrug(String sentence, String drug) {
+    final lowerSentence = sentence.toLowerCase();
+    
+    // Получаем качественную основу для поиска (например, "сертралин")
+    final String stem = rusPorterStem(drug); 
+
+    // Регулярное выражение ищет основу слова, за которой могут идти любые русские буквы (окончания)
+    // Используем твою отличную заготовку с негативной ретроспективной проверкой границ
+    final pattern = RegExp(
+      r'(?<![а-яА-ЯёЁa-zA-Z])' + RegExp.escape(stem) + r'[а-яА-ЯёЁ]*',
+      caseSensitive: false,
+    );
+    
+    return pattern.hasMatch(lowerSentence);
+  }
+  
+
+  /*static bool _containsDrug(String sentence, String drug) {
+    //final pattern = RegExp(r'\b' + drug + r'\w*');
+    // В Dart стандартный символ \b в RegExp часто некорректно работает с не-латинскими символами.
+    // Он просто «не видит» границы слова в кириллице.
+    // Поэтому используем более простой, но эффективный способ: проверяем, что перед ним нет букв.
+    // В стандартном движке регулярных выражений Dart (как и в JavaScript) \w по умолчанию поддерживает только латиницу ([a-zA-Z0-9_]).
+    // Русские буквы он часто просто "не видит".
+    // проверка слева + слово + ХВОСТ + Проверка СПРАВА
+    final pattern = RegExp(r'(?<![а-яА-ЯёЁa-zA-Z])' + drug + r'[а-яА-ЯёЁ]*' + r'(?![а-яА-ЯёЁ])');
+    return pattern.hasMatch(sentence);
+  }*/
 
   // Получение окна контекста
   static String _buildContext(List<String> sentences, int index, int window) {
@@ -301,24 +440,6 @@ class TextMiningService {
 
   static bool _containsKeyword(String sentence) {
     return interactionKeywords.any((k) => sentence.contains(k));
-  }
-
-  // Функция для получения основы слова препарата (для более гибкого поиска)
-  static String _stemDrug(String word) {
-    if (word.length <= 5) return word;
-    return word.substring(0, word.length - 2);
-  }
-
-  static bool _containsDrug(String sentence, String drug) {
-    //final pattern = RegExp(r'\b' + drug + r'\w*');
-    // В Dart стандартный символ \b в RegExp часто некорректно работает с не-латинскими символами.
-    // Он просто «не видит» границы слова в кириллице.
-    // Поэтому используем более простой, но эффективный способ: проверяем, что перед ним нет букв.
-    // В стандартном движке регулярных выражений Dart (как и в JavaScript) \w по умолчанию поддерживает только латиницу ([a-zA-Z0-9_]).
-    // Русские буквы он часто просто "не видит".
-    // проверка слева + слово + ХВОСТ + Проверка СПРАВА
-    final pattern = RegExp(r'(?<![а-яА-ЯёЁa-zA-Z])' + drug + r'[а-яА-ЯёЁ]*' + r'(?![а-яА-ЯёЁ])');
-    return pattern.hasMatch(sentence);
   }
 
   static bool _hasNegation(String sentence) {
