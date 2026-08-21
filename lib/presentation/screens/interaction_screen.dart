@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/text_search_result.dart';
 import '../../models/interaction_result.dart';
 import '../../models/evidence.dart';
 import '../../models/atc_code.dart';
+import '../../models/eskl_drug_entry.dart';
 import '../../data/repositories/interaction_repository.dart';
 import '../../data/repositories/atc_repository.dart';
+import '../../data/repositories/eskl_repository.dart';
 import '../../data/services/text_mining_service.dart';
 
 class InteractionCheckScreen extends StatefulWidget {
@@ -16,25 +19,103 @@ class InteractionCheckScreen extends StatefulWidget {
 
 class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
   bool isLoading = false;
-  List<String> selectedDrugs = []; // Выбранные препараты (каноничные названия)
-  
-  // ВСЕ предыдущие 12 переменных результата заменены на ОДИН чистый объект!
-  InteractionResult? checkResult; 
+  List<String> selectedDrugs = []; // Выбранные препараты (каноничные EN-названия для PAIRS/инструкций)
 
-  // Метод для добавления препарата в список при нажатии на Enter или кнопку
+  // ВСЕ предыдущие 12 переменных результата заменены на ОДИН чистый объект!
+  InteractionResult? checkResult;
+
+  final EsklRepository _esklRepository = EsklRepository();
+  final AtcRepository _atcRepository = AtcRepository();
+  final TextEditingController _drugInputController = TextEditingController();
+  final FocusNode _drugInputFocusNode = FocusNode();
+  List<EsklDrugEntry> _suggestions = [];
+  Timer? _debounce;
+
+  // Надёжное RU-название (МНН из ESKL) для препаратов, добавленных через автокомплит —
+  // подменяет собой хрупкую TextMiningService.getRuName()/transliterate() для отображения,
+  // раз уж точное название у нас и так уже есть на момент выбора подсказки.
+  final Map<String, String> _ruDisplayNames = {};
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _drugInputController.dispose();
+    _drugInputFocusNode.dispose();
+    super.dispose();
+  }
+
+  String _resolveRuName(String canonical) {
+    return _ruDisplayNames[canonical] ?? TextMiningService.getRuName(canonical);
+  }
+
+  void _addCanonical(String canonical, {String? ruDisplayName}) {
+    setState(() {
+      if (!selectedDrugs.contains(canonical)) {
+        selectedDrugs.add(canonical);
+        if (ruDisplayName != null) {
+          _ruDisplayNames[canonical] = ruDisplayName;
+        }
+      }
+    });
+  }
+
+  // Метод для добавления препарата в список при нажатии на Enter или кнопку (ручной ввод текста)
   void _addDrug(TextEditingController controller, FocusNode focusNode) {
     final text = controller.text.trim();
     if (text.isNotEmpty) {
       final String canonical = TextMiningService.substanceToCanonical(text);
-      setState(() {
-        if (!selectedDrugs.contains(canonical)) {
-          selectedDrugs.add(canonical);
-        }
-      });
+      _addCanonical(canonical);
       controller.clear();
+      setState(() { _suggestions = []; });
       // Возвращаем фокус в поле ввода, чтобы сразу писать следующее лекарство
-      focusNode.requestFocus(); 
+      focusNode.requestFocus();
     }
+  }
+
+  // Приводит название из БД (ВЕРХНИЙ РЕГИСТР) к читаемому виду для отображения пользователю,
+  // не трогая исходные данные в БД.
+  String _toTitleCase(String input) {
+    if (input.isEmpty) return input;
+    return input
+        .toLowerCase()
+        .split(' ')
+        .map((word) => word.isEmpty ? word : word[0].toUpperCase() + word.substring(1))
+        .join(' ');
+  }
+
+  // Асинхронный (debounced) поиск подсказок по ЕСКЛП — вызывается при каждом изменении ввода.
+  void _onDrugInputChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      if (text.trim().isEmpty) {
+        if (mounted) setState(() { _suggestions = []; });
+        return;
+      }
+      final results = await _esklRepository.searchAutocomplete(text);
+      if (mounted) {
+        setState(() { _suggestions = results; });
+      }
+    });
+  }
+
+  // Выбор подсказки автокомплита. Независимо от того, было выбрано торговое название
+  // или МНН, в selectedDrugs всегда попадает ДЕЙСТВУЮЩЕЕ ВЕЩЕСТВО — канонический EN-код,
+  // по которому реально ищут PAIRS/файлы инструкций. Сведение делается через мост
+  // ATC-код (из ESKL) → ChEMBL.pref_name (AtcRepository.resolveCanonicalName), а не через
+  // подстановку торгового названия/МНН напрямую — см. разбор в MILESTONE_2_ESKL_INTEGRATION.md.
+  // Если для ATC-кода нет соответствия в ChEMBL (бывает — не все 21к+ препаратов ESKL входят
+  // в ChEMBL), используем МНН как есть: DDI/инструкция для него корректно не найдутся,
+  // а ATC/фармгруппа всё равно отобразятся через прямой поиск по ESKL.
+  Future<void> _selectSuggestion(EsklDrugEntry entry) async {
+    setState(() { _suggestions = []; });
+    _drugInputController.clear();
+
+    final String? bridged = await _atcRepository.resolveCanonicalName(entry.atcCodes);
+    final String canonical = bridged ?? entry.standardInn.toLowerCase();
+    if (!mounted) return;
+
+    _addCanonical(canonical, ruDisplayName: _toTitleCase(entry.standardInn));
+    _drugInputFocusNode.requestFocus();
   }
 
   @override
@@ -65,28 +146,49 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             ),
             const SizedBox(height: 24),
             
-            // Поле ввода Autocomplete
-            Autocomplete<String>(
-              optionsBuilder: (textEditingValue) => const Iterable<String>.empty(),
-              fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  // Вот этот метод вернет обработку Enter!
-                  onSubmitted: (value) => _addDrug(controller, focusNode), 
-                  decoration: InputDecoration(
-                    labelText: 'Введите название препарата',
-                    hintText: 'Например: escitalopram sertraline',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.add),
-                      // Вызываем ту же самую функцию при клике на плюсик
-                      onPressed: () => _addDrug(controller, focusNode),
-                    ),
-                  ),
-                );
-              },
+            // Поле ввода с автокомплитом по eskl_unique.db.
+            // Flutter'овский Autocomplete-виджет требует синхронный optionsBuilder,
+            // а поиск идёт в SQLite асинхронно — поэтому здесь простой TextField
+            // с debounced-поиском и собственным выпадающим списком подсказок.
+            TextField(
+              controller: _drugInputController,
+              focusNode: _drugInputFocusNode,
+              onChanged: _onDrugInputChanged,
+              // Вот этот метод вернет обработку Enter! (ручной ввод без выбора подсказки)
+              onSubmitted: (value) => _addDrug(_drugInputController, _drugInputFocusNode),
+              decoration: InputDecoration(
+                labelText: 'Введите название препарата',
+                hintText: 'Например: Нурофен, ибупрофен',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.add),
+                  // Вызываем ту же самую функцию при клике на плюсик
+                  onPressed: () => _addDrug(_drugInputController, _drugInputFocusNode),
+                ),
+              ),
             ),
+            if (_suggestions.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                constraints: const BoxConstraints(maxHeight: 220),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _suggestions.length,
+                  itemBuilder: (context, index) {
+                    final entry = _suggestions[index];
+                    return ListTile(
+                      dense: true,
+                      title: Text(_toTitleCase(entry.nameTrade)),
+                      subtitle: Text(_toTitleCase(entry.standardInn)),
+                      onTap: () => _selectSuggestion(entry),
+                    );
+                  },
+                ),
+              ),
             const SizedBox(height: 16), // Отступ сверху
             
             // Отображение выбранных чипсов-квадратиков
@@ -97,12 +199,13 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
                 children: selectedDrugs.map((drug) {
                   return Chip(
                     backgroundColor: Colors.blue.shade100,
-                    label: Text(drug),
+                    label: Text(_resolveRuName(drug)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), //Скругляем до состояния "квадратика"
                     deleteIcon: const Icon(Icons.close, size: 18),
                     onDeleted: () {
                       setState(() {
                         selectedDrugs.remove(drug);
+                        _ruDisplayNames.remove(drug);
                       });
                     },
                   );
@@ -149,15 +252,22 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
     try {
       final String drugA = selectedDrugs[0];
       final String drugB = selectedDrugs[1];
-      final String drugARu = TextMiningService.getRuName(drugA);
-      final String drugBRu = TextMiningService.getRuName(drugB);
+      final String drugARu = _resolveRuName(drugA);
+      final String drugBRu = _resolveRuName(drugB);
 
       final repo = InteractionRepository();
       final interaction = await repo.findInteraction(drugA, drugB);
 
+      // ЕСКЛП (eskl_unique.db) — первичный источник ATC-кода и фармгруппы на русском.
+      final esklEntriesA = await _esklRepository.findByInn(drugARu);
+      final esklEntriesB = await _esklRepository.findByInn(drugBRu);
+      final esklBestA = esklEntriesA.isNotEmpty ? esklEntriesA.first : null;
+      final esklBestB = esklEntriesB.isNotEmpty ? esklEntriesB.first : null;
+
+      // ChEMBL — вторичный/резервный источник, используется только если ЕСКЛП не нашёл совпадение.
       final atcRepo = AtcRepository();
-      final atcCodesA = await atcRepo.findAtcCodes(drugA);
-      final atcCodesB = await atcRepo.findAtcCodes(drugB);
+      final atcCodesA = esklBestA == null ? await atcRepo.findAtcCodes(drugA) : <AtcCode>[];
+      final atcCodesB = esklBestB == null ? await atcRepo.findAtcCodes(drugB) : <AtcCode>[];
 
       if (!mounted) return;
 
@@ -215,6 +325,10 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             instructionUsed: tempInstructionUsed, // <-- Передаем зафиксированное имя
             atcCodesA: atcCodesA,
             atcCodesB: atcCodesB,
+            esklAtcCodesA: esklBestA?.atcCodes ?? const [],
+            esklAtcCodesB: esklBestB?.atcCodes ?? const [],
+            ftgNameRuA: esklBestA?.ftgNameRu,
+            ftgNameRuB: esklBestB?.ftgNameRu,
           );
         });
       }
@@ -298,11 +412,11 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
             const SizedBox(height: 8),
 
             Text(
-              'ATC (${result.drugARu}): ${_formatAtcCodes(result.atcCodesA)}',
+              'ATC (${result.drugARu}): ${_formatAtcAndPharmGroup(result.esklAtcCodesA, result.ftgNameRuA, result.atcCodesA)}',
               style: TextStyle(fontSize: 14, color: Colors.grey[700]),
             ),
             Text(
-              'ATC (${result.drugBRu}): ${_formatAtcCodes(result.atcCodesB)}',
+              'ATC (${result.drugBRu}): ${_formatAtcAndPharmGroup(result.esklAtcCodesB, result.ftgNameRuB, result.atcCodesB)}',
               style: TextStyle(fontSize: 14, color: Colors.grey[700]),
             ),
             const SizedBox(height: 8),
@@ -392,10 +506,20 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen> {
     );
   } // ИЗМЕНЕННЫЙ КОНСТРУКТОР: теперь он принимает весь InteractionResult, а не отдельные поля
 
-  // Форматирует список ATC-кодов (level5) препарата для строки в карточке
-  String _formatAtcCodes(List<AtcCode> codes) {
-    if (codes.isEmpty) return 'нет данных';
-    return codes.map((c) => c.level5).join(', ');
+  // Форматирует ATC-код + русскую фармгруппу для строки в карточке.
+  // ЕСКЛП — первичный источник (RU); ChEMBL используется только как fallback,
+  // если ЕСКЛП не нашёл совпадение (см. MILESTONE_2_ESKL_INTEGRATION.md).
+  String _formatAtcAndPharmGroup(List<String> esklAtcCodes, String? ftgNameRu, List<AtcCode> chemblFallback) {
+    if (esklAtcCodes.isNotEmpty) {
+      final codesStr = esklAtcCodes.join(', ');
+      final ftg = (ftgNameRu != null && ftgNameRu.isNotEmpty) ? ftgNameRu : 'фармгруппа не определена';
+      return '$codesStr — $ftg';
+    }
+    if (chemblFallback.isNotEmpty) {
+      final codesStr = chemblFallback.map((c) => c.level5).join(', ');
+      return '$codesStr (источник: ChEMBL, рус. фармгруппа недоступна)';
+    }
+    return 'нет данных';
   }
 
   // Вспомогательные методы отображения для UI

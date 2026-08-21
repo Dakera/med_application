@@ -12,8 +12,14 @@ class InteractionResult {
   final String section;
   final List<Evidence> evidence;
   final String? instructionUsed;
-  final List<AtcCode> atcCodesA;
+  final List<AtcCode> atcCodesA; // ChEMBL — вторичный/резервный источник (см. CLAUDE.md)
   final List<AtcCode> atcCodesB;
+
+  // ЕСКЛП (eskl_unique.db) — первичный источник ATC-кода и фармгруппы на русском.
+  final List<String> esklAtcCodesA;
+  final List<String> esklAtcCodesB;
+  final String? ftgNameRuA;
+  final String? ftgNameRuB;
 
   InteractionResult({
     required this.drugA,
@@ -27,5 +33,9 @@ class InteractionResult {
     required this.instructionUsed,
     this.atcCodesA = const [],
     this.atcCodesB = const [],
+    this.esklAtcCodesA = const [],
+    this.esklAtcCodesB = const [],
+    this.ftgNameRuA,
+    this.ftgNameRuB,
   });
 }
